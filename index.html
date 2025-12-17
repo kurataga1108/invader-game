@@ -16,6 +16,7 @@
     cvs.height = window.innerHeight;
 
     let px, bullets, eBullets, enemies, enemyDir, score, lives, gameState, boss;
+    let lastTouchX = 0; // 前回の指の位置を記録
 
     function init() {
       px = cvs.width / 2;
@@ -35,17 +36,30 @@
       }
     }
 
-    window.addEventListener("touchmove", (e) => {
-      if (gameState === "play") px = e.touches[0].clientX;
-      e.preventDefault();
-    }, { passive: false });
-
+    // タッチした瞬間
     window.addEventListener("touchstart", (e) => {
       if (gameState === "play") {
+        lastTouchX = e.touches[0].clientX; // 触れた位置を覚える
         bullets.push({ x: px, y: cvs.height - 80 });
       } else {
         init();
       }
+      e.preventDefault();
+    }, { passive: false });
+
+    // 指を動かしている最中
+    window.addEventListener("touchmove", (e) => {
+      if (gameState === "play") {
+        const touchX = e.touches[0].clientX;
+        const diffX = touchX - lastTouchX; // 前回からの移動距離を計算
+        px += diffX; // 移動した分だけ自機を動かす
+        lastTouchX = touchX; // 今の位置を次に備えて保存
+
+        // 画面外にはみ出さないように制限
+        if (px < 20) px = 20;
+        if (px > cvs.width - 20) px = cvs.width - 20;
+      }
+      e.preventDefault();
     }, { passive: false });
 
     function loop() {
@@ -53,17 +67,13 @@
       ctx.fillRect(0, 0, cvs.width, cvs.height);
 
       if (gameState === "play") {
-        // 自機の描画
         ctx.fillStyle = "#0f0";
         ctx.fillRect(px - 20, cvs.height - 80, 40, 20);
 
-        // 自機の弾
         ctx.fillStyle = "white";
         bullets.forEach((b, bi) => {
           b.y -= 8;
           ctx.fillRect(b.x - 2, b.y, 4, 10);
-          
-          // 敵への当たり判定
           enemies.forEach((e) => {
             if (e.alive && b.x > e.x && b.x < e.x + 30 && b.y > e.y && b.y < e.y + 25) {
               e.alive = false;
@@ -71,20 +81,17 @@
               score += 10;
             }
           });
-
-          // ボスへの当たり判定
           if (boss && boss.hp > 0 && b.x > boss.x && b.x < boss.x + 80 && b.y > boss.y && b.y < boss.y + 40) {
             boss.hp--;
             bullets.splice(bi, 1);
             if (boss.hp <= 0) {
-              score += lives * 500; // クリアボーナス
+              score += lives * 500;
               gameState = "clear";
             }
           }
           if (b.y < 0) bullets.splice(bi, 1);
         });
 
-        // 敵の弾（敵・ボスの攻撃）
         ctx.fillStyle = "yellow";
         eBullets.forEach((eb, ebi) => {
           eb.y += eb.vy || 4;
@@ -92,8 +99,6 @@
           ctx.beginPath();
           ctx.arc(eb.x, eb.y, eb.size || 3, 0, Math.PI*2);
           ctx.fill();
-
-          // 自機への当たり判定
           if (eb.x > px - 20 && eb.x < px + 20 && eb.y > cvs.height - 80 && eb.y < cvs.height - 60) {
             eBullets.splice(ebi, 1);
             lives--;
@@ -102,7 +107,6 @@
           if (eb.y > cvs.height) eBullets.splice(ebi, 1);
         });
 
-        // 通常敵の処理
         let moveDown = false;
         let aliveCount = 0;
         enemies.forEach(e => {
@@ -112,8 +116,6 @@
           if (e.x > cvs.width - 40 || e.x < 10) moveDown = true;
           ctx.fillStyle = "red";
           ctx.fillRect(e.x, e.y, 30, 25);
-
-          // 敵の弾発射
           if (Math.random() < 0.005) eBullets.push({ x: e.x + 15, y: e.y + 25 });
         });
 
@@ -122,22 +124,16 @@
           enemies.forEach(e => { e.y += 15; if(e.y > cvs.height - 100) gameState = "over"; });
         }
 
-        // ボス出現判定
         if (aliveCount === 0 && !boss) {
           boss = { x: cvs.width / 2 - 40, y: 50, hp: 20, dir: 1 };
         }
 
-        // ボスの処理
         if (boss) {
           boss.x += 2 * boss.dir;
-          boss.y += 0.1; // 徐々に迫る
+          boss.y += 0.1;
           if (boss.x > cvs.width - 80 || boss.x < 0) boss.dir *= -1;
-          
-          // ボスの描画（ダメージで色が変わる）
           ctx.fillStyle = boss.hp > 5 ? "purple" : "orange";
           ctx.fillRect(boss.x, boss.y, 80, 40);
-
-          // ボスの3方向弾
           if (Math.random() < 0.03) {
             [-2, 0, 2].forEach(vx => {
               eBullets.push({ x: boss.x + 40, y: boss.y + 40, vx: vx, vy: 5, size: 6 });
@@ -147,7 +143,6 @@
         }
       }
 
-      // UI表示
       ctx.fillStyle = "white";
       ctx.font = "18px Arial";
       ctx.textAlign = "left";
@@ -159,7 +154,6 @@
       } else if (gameState === "clear") {
         showScreen("MISSION CLEAR!", "yellow", "Bonus Score: " + (lives * 500));
       }
-
       requestAnimationFrame(loop);
     }
 
