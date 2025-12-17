@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>
+    body { margin: 0; background: #000; overflow: hidden; touch-action: none; font-family: sans-serif; }
+    canvas { display: block; background: #000; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <canvas id="g"></canvas>
+  <script>
+    const cvs = document.getElementById("g");
+    const ctx = cvs.getContext("2d");
+    cvs.width = window.innerWidth;
+    cvs.height = window.innerHeight;
+
+    let px, bullets, enemies, enemyDir, score, gameState;
+
+    function init() {
+      px = cvs.width / 2;
+      bullets = [];
+      enemies = [];
+      enemyDir = 1;
+      score = 0;
+      gameState = "play"; // "play", "over", "clear"
+      
+      for (let r = 0; r < 5; r++) {
+        for (let c = 0; c < 7; c++) {
+          enemies.push({ x: c * 45 + 30, y: r * 35 + 60, alive: true });
+        }
+      }
+    }
+
+    window.addEventListener("touchmove", (e) => {
+      if (gameState === "play") px = e.touches[0].clientX;
+      e.preventDefault();
+    }, { passive: false });
+
+    window.addEventListener("touchstart", (e) => {
+      if (gameState === "play") {
+        bullets.push({ x: px, y: cvs.height - 80 });
+      } else {
+        init(); // ゲームオーバーかクリア時にタップで再スタート
+      }
+    }, { passive: false });
+
+    function loop() {
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+      if (gameState === "play") {
+        // 自機
+        ctx.fillStyle = "#0f0";
+        ctx.fillRect(px - 20, cvs.height - 80, 40, 20);
+
+        // 弾と当たり判定
+        ctx.fillStyle = "white";
+        bullets.forEach((b, bi) => {
+          b.y -= 8;
+          ctx.fillRect(b.x - 2, b.y, 4, 10);
+          enemies.forEach((e) => {
+            if (e.alive && b.x > e.x && b.x < e.x + 25 && b.y > e.y && b.y < e.y + 20) {
+              e.alive = false;
+              bullets.splice(bi, 1);
+              score += 10;
+            }
+          });
+          if (b.y < 0) bullets.splice(bi, 1);
+        });
+
+        // 敵の移動と敗北判定
+        let moveDown = false;
+        let aliveCount = 0;
+        enemies.forEach(e => {
+          if (!e.alive) return;
+          aliveCount++;
+          e.x += 1.8 * enemyDir;
+          if (e.x > cvs.width - 30 || e.x < 10) moveDown = true;
+          if (e.y > cvs.height - 100) gameState = "over"; // 侵略されたら負け
+          ctx.fillStyle = "red";
+          ctx.fillRect(e.x, e.y, 25, 20);
+        });
+
+        if (moveDown) {
+          enemyDir *= -1;
+          enemies.forEach(e => { e.y += 12; });
+        }
+
+        if (aliveCount === 0) gameState = "clear";
+      }
+
+      // 文字表示
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.fillText("SCORE: " + score, 20, 40);
+
+      if (gameState === "over") {
+        ctx.fillStyle = "red";
+        ctx.font = "40px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", cvs.width / 2, cvs.height / 2);
+        ctx.font = "20px Arial";
+        ctx.fillText("Tap to Restart", cvs.width / 2, cvs.height / 2 + 50);
+        ctx.textAlign = "left";
+      }
+
+      if (gameState === "clear") {
+        ctx.fillStyle = "yellow";
+        ctx.font = "40px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("MISSION CLEAR!", cvs.width / 2, cvs.height / 2);
+        ctx.font = "20px Arial";
+        ctx.fillText("Tap to Play Again", cvs.width / 2, cvs.height / 2 + 50);
+        ctx.textAlign = "left";
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    init();
+    loop();
+  </script>
+</body>
+</html>
