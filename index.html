@@ -16,7 +16,10 @@
     cvs.height = window.innerHeight;
 
     let px, bullets, eBullets, enemies, enemyDir, score, lives, gameState, boss;
-    let lastTouchX = 0; // 前回の指の位置を記録
+    let lastTouchX = 0;
+
+    // ボタンの範囲を定義
+    const btn = { x: 0, y: 0, w: 200, h: 60 };
 
     function init() {
       px = cvs.width / 2;
@@ -36,26 +39,28 @@
       }
     }
 
-    // タッチした瞬間
     window.addEventListener("touchstart", (e) => {
+      const tx = e.touches[0].clientX;
+      const ty = e.touches[0].clientY;
+
       if (gameState === "play") {
-        lastTouchX = e.touches[0].clientX; // 触れた位置を覚える
+        lastTouchX = tx;
         bullets.push({ x: px, y: cvs.height - 80 });
       } else {
-        init();
+        // ボタンが押されたか判定
+        if (tx > btn.x && tx < btn.x + btn.w && ty > btn.y && ty < btn.y + btn.h) {
+          init();
+        }
       }
       e.preventDefault();
     }, { passive: false });
 
-    // 指を動かしている最中
     window.addEventListener("touchmove", (e) => {
       if (gameState === "play") {
         const touchX = e.touches[0].clientX;
-        const diffX = touchX - lastTouchX; // 前回からの移動距離を計算
-        px += diffX; // 移動した分だけ自機を動かす
-        lastTouchX = touchX; // 今の位置を次に備えて保存
-
-        // 画面外にはみ出さないように制限
+        const diffX = touchX - lastTouchX;
+        px += diffX;
+        lastTouchX = touchX;
         if (px < 20) px = 20;
         if (px > cvs.width - 20) px = cvs.width - 20;
       }
@@ -161,11 +166,24 @@
       ctx.fillStyle = color;
       ctx.font = "40px Arial";
       ctx.textAlign = "center";
-      ctx.fillText(text, cvs.width / 2, cvs.height / 2);
+      ctx.fillText(text, cvs.width / 2, cvs.height / 2 - 40);
+      
       ctx.font = "20px Arial";
       ctx.fillStyle = "white";
-      if(sub) ctx.fillText(sub, cvs.width / 2, cvs.height / 2 + 40);
-      ctx.fillText("Tap to Restart", cvs.width / 2, cvs.height / 2 + 80);
+      if(sub) ctx.fillText(sub, cvs.width / 2, cvs.height / 2);
+
+      // 再挑戦ボタンの描画
+      btn.x = cvs.width / 2 - 100;
+      btn.y = cvs.height / 2 + 40;
+      ctx.fillStyle = "#333";
+      ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
+      
+      ctx.fillStyle = "white";
+      ctx.font = "bold 20px Arial";
+      ctx.fillText("再挑戦する", cvs.width / 2, btn.y + 38);
     }
 
     init();
