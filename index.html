@@ -15,27 +15,54 @@
     cvs.width = window.innerWidth;
     cvs.height = window.innerHeight;
 
-    let px, bullets, eBullets, enemies, enemyDir, score, lives, gameState, boss;
+    let px, bullets, eBullets, enemies, particles, enemyDir, score, lives, gameState, boss, difficulty;
     let lastTouchX = 0;
+    const btn = { x: 0, y: 0, w: 200, h: 50 };
+    const diffBtns = [
+      { id: "Easy", x: 0, y: 0, w: 80, h: 40 },
+      { id: "Normal", x: 0, y: 0, w: 80, h: 40 },
+      { id: "Hard", x: 0, y: 0, w: 80, h: 40 }
+    ];
 
-    // ボタンの範囲を定義
-    const btn = { x: 0, y: 0, w: 200, h: 60 };
-
-    function init() {
+    function init(diff = "Normal") {
+      difficulty = diff;
       px = cvs.width / 2;
       bullets = [];
       eBullets = [];
       enemies = [];
+      particles = [];
       enemyDir = 1;
       score = 0;
       lives = 3;
       gameState = "play";
       boss = null;
       
-      for (let r = 0; r < 4; r++) {
-        for (let c = 0; c < 6; c++) {
-          enemies.push({ x: c * 50 + 40, y: r * 40 + 70, alive: true });
+      let rows = diff === "Hard" ? 6 : 4;
+      let cols = diff === "Hard" ? 8 : 6;
+      let hpMult = diff === "Hard" ? 2 : 1;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          enemies.push({ 
+            x: c * (cvs.width/(cols+1)) + 30, 
+            y: r * 35 + 80, 
+            alive: true, 
+            hp: hpMult 
+          });
         }
+      }
+    }
+
+    // パーティクル作成
+    function createExplosion(x, y, color, count = 8) {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x: x, y: y,
+          vx: (Math.random() - 0.5) * 6,
+          vy: (Math.random() - 0.5) * 6,
+          life: 30,
+          color: color
+        });
       }
     }
 
@@ -43,14 +70,16 @@
       const tx = e.touches[0].clientX;
       const ty = e.touches[0].clientY;
 
-      if (gameState === "play") {
+      if (gameState === "menu") {
+        diffBtns.forEach(b => {
+          if (tx > b.x && tx < b.x + b.w && ty > b.y && ty < b.y + b.h) difficulty = b.id;
+        });
+        if (tx > btn.x && tx < btn.x + btn.w && ty > btn.y && ty < btn.y + btn.h) init(difficulty);
+      } else if (gameState === "play") {
         lastTouchX = tx;
         bullets.push({ x: px, y: cvs.height - 80 });
       } else {
-        // ボタンが押されたか判定
-        if (tx > btn.x && tx < btn.x + btn.w && ty > btn.y && ty < btn.y + btn.h) {
-          init();
-        }
+        if (tx > btn.x && tx < btn.x + btn.w && ty > btn.y && ty < btn.y + btn.h) gameState = "menu";
       }
       e.preventDefault();
     }, { passive: false });
@@ -58,11 +87,9 @@
     window.addEventListener("touchmove", (e) => {
       if (gameState === "play") {
         const touchX = e.touches[0].clientX;
-        const diffX = touchX - lastTouchX;
-        px += diffX;
+        px += touchX - lastTouchX;
         lastTouchX = touchX;
-        if (px < 20) px = 20;
-        if (px > cvs.width - 20) px = cvs.width - 20;
+        px = Math.max(20, Math.min(cvs.width - 20, px));
       }
       e.preventDefault();
     }, { passive: false });
@@ -71,122 +98,134 @@
       ctx.fillStyle = "black";
       ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-      if (gameState === "play") {
-        ctx.fillStyle = "#0f0";
-        ctx.fillRect(px - 20, cvs.height - 80, 40, 20);
-
-        ctx.fillStyle = "white";
-        bullets.forEach((b, bi) => {
-          b.y -= 8;
-          ctx.fillRect(b.x - 2, b.y, 4, 10);
-          enemies.forEach((e) => {
-            if (e.alive && b.x > e.x && b.x < e.x + 30 && b.y > e.y && b.y < e.y + 25) {
-              e.alive = false;
-              bullets.splice(bi, 1);
-              score += 10;
-            }
-          });
-          if (boss && boss.hp > 0 && b.x > boss.x && b.x < boss.x + 80 && b.y > boss.y && b.y < boss.y + 40) {
-            boss.hp--;
-            bullets.splice(bi, 1);
-            if (boss.hp <= 0) {
-              score += lives * 500;
-              gameState = "clear";
-            }
-          }
-          if (b.y < 0) bullets.splice(bi, 1);
-        });
-
-        ctx.fillStyle = "yellow";
-        eBullets.forEach((eb, ebi) => {
-          eb.y += eb.vy || 4;
-          if (eb.vx) eb.x += eb.vx;
-          ctx.beginPath();
-          ctx.arc(eb.x, eb.y, eb.size || 3, 0, Math.PI*2);
-          ctx.fill();
-          if (eb.x > px - 20 && eb.x < px + 20 && eb.y > cvs.height - 80 && eb.y < cvs.height - 60) {
-            eBullets.splice(ebi, 1);
-            lives--;
-            if (lives <= 0) gameState = "over";
-          }
-          if (eb.y > cvs.height) eBullets.splice(ebi, 1);
-        });
-
-        let moveDown = false;
-        let aliveCount = 0;
-        enemies.forEach(e => {
-          if (!e.alive) return;
-          aliveCount++;
-          e.x += 1.5 * enemyDir;
-          if (e.x > cvs.width - 40 || e.x < 10) moveDown = true;
-          ctx.fillStyle = "red";
-          ctx.fillRect(e.x, e.y, 30, 25);
-          if (Math.random() < 0.005) eBullets.push({ x: e.x + 15, y: e.y + 25 });
-        });
-
-        if (moveDown) {
-          enemyDir *= -1;
-          enemies.forEach(e => { e.y += 15; if(e.y > cvs.height - 100) gameState = "over"; });
-        }
-
-        if (aliveCount === 0 && !boss) {
-          boss = { x: cvs.width / 2 - 40, y: 50, hp: 20, dir: 1 };
-        }
-
-        if (boss) {
-          boss.x += 2 * boss.dir;
-          boss.y += 0.1;
-          if (boss.x > cvs.width - 80 || boss.x < 0) boss.dir *= -1;
-          ctx.fillStyle = boss.hp > 5 ? "purple" : "orange";
-          ctx.fillRect(boss.x, boss.y, 80, 40);
-          if (Math.random() < 0.03) {
-            [-2, 0, 2].forEach(vx => {
-              eBullets.push({ x: boss.x + 40, y: boss.y + 40, vx: vx, vy: 5, size: 6 });
-            });
-          }
-          if (boss.y > cvs.height - 120) gameState = "over";
-        }
-      }
-
-      ctx.fillStyle = "white";
-      ctx.font = "18px Arial";
-      ctx.textAlign = "left";
-      ctx.fillText("SCORE: " + score, 20, 30);
-      ctx.fillText("LIVES: " + "❤".repeat(lives), cvs.width - 120, 30);
-
-      if (gameState === "over") {
-        showScreen("GAME OVER", "red");
-      } else if (gameState === "clear") {
-        showScreen("MISSION CLEAR!", "yellow", "Bonus Score: " + (lives * 500));
+      if (gameState === "menu") {
+        drawMenu();
+      } else if (gameState === "play") {
+        updatePlay();
+      } else {
+        drawResult();
       }
       requestAnimationFrame(loop);
     }
 
-    function showScreen(text, color, sub) {
-      ctx.fillStyle = color;
-      ctx.font = "40px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(text, cvs.width / 2, cvs.height / 2 - 40);
-      
-      ctx.font = "20px Arial";
-      ctx.fillStyle = "white";
-      if(sub) ctx.fillText(sub, cvs.width / 2, cvs.height / 2);
+    function updatePlay() {
+      // 自機
+      ctx.fillStyle = "#0f0";
+      ctx.fillRect(px - 20, cvs.height - 80, 40, 20);
 
-      // 再挑戦ボタンの描画
-      btn.x = cvs.width / 2 - 100;
-      btn.y = cvs.height / 2 + 40;
-      ctx.fillStyle = "#333";
-      ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
-      ctx.strokeStyle = "white";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
-      
+      // パーティクル
+      particles.forEach((p, i) => {
+        p.x += p.vx; p.y += p.vy; p.life--;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 3, 3);
+        if (p.life <= 0) particles.splice(i, 1);
+      });
+
+      // 弾と敵の判定
       ctx.fillStyle = "white";
-      ctx.font = "bold 20px Arial";
-      ctx.fillText("再挑戦する", cvs.width / 2, btn.y + 38);
+      bullets.forEach((b, bi) => {
+        b.y -= 8;
+        ctx.fillRect(b.x - 2, b.y, 4, 10);
+        enemies.forEach(e => {
+          if (e.alive && b.x > e.x && b.x < e.x + 30 && b.y > e.y && b.y < e.y + 25) {
+            e.hp--; bullets.splice(bi, 1);
+            if(e.hp <= 0) {
+              e.alive = false; score += 10;
+              createExplosion(e.x + 15, e.y + 12, "red");
+            }
+          }
+        });
+        if (boss && boss.hp > 0 && b.x > boss.x && b.x < boss.x + 80 && b.y > boss.y && b.y < boss.y + 40) {
+          boss.hp--; bullets.splice(bi, 1);
+          createExplosion(b.x, b.y, "orange", 3);
+          if (boss.hp <= 0) { 
+            createExplosion(boss.x + 40, boss.y + 20, "purple", 20);
+            score += lives * 500; gameState = "clear"; 
+          }
+        }
+        if (b.y < 0) bullets.splice(bi, 1);
+      });
+
+      // 敵の弾
+      ctx.fillStyle = "yellow";
+      eBullets.forEach((eb, i) => {
+        eb.y += eb.vy || 4; if (eb.vx) eb.x += eb.vx;
+        ctx.beginPath(); ctx.arc(eb.x, eb.y, eb.size || 3, 0, Math.PI*2); ctx.fill();
+        if (eb.x > px - 20 && eb.x < px + 20 && eb.y > cvs.height - 80 && eb.y < cvs.height - 60) {
+          eBullets.splice(i, 1); lives--;
+          createExplosion(px, cvs.height - 70, "#0f0", 15);
+          if (lives <= 0) gameState = "over";
+        }
+        if (eb.y > cvs.height) eBullets.splice(i, 1);
+      });
+
+      // 敵移動
+      let moveDown = false, aliveCount = 0;
+      let shootRate = difficulty === "Easy" ? 0.002 : (difficulty === "Hard" ? 0.008 : 0.005);
+      enemies.forEach(e => {
+        if (!e.alive) return;
+        aliveCount++; e.x += (difficulty === "Hard" ? 2 : 1.5) * enemyDir;
+        if (e.x > cvs.width - 40 || e.x < 10) moveDown = true;
+        ctx.fillStyle = e.hp > 1 ? "#f0f" : "red";
+        ctx.fillRect(e.x, e.y, 30, 25);
+        if (Math.random() < shootRate) eBullets.push({ x: e.x + 15, y: e.y + 25 });
+      });
+      if (moveDown) { enemyDir *= -1; enemies.forEach(e => e.y += 15); }
+
+      // ボス出現
+      if (aliveCount === 0 && !boss) {
+        let bhp = difficulty === "Easy" ? 10 : (difficulty === "Hard" ? 40 : 20);
+        boss = { x: cvs.width/2-40, y: 50, hp: bhp, maxHp: bhp, dir: 1 };
+      }
+      if (boss) {
+        boss.x += 2 * boss.dir; boss.y += 0.1;
+        if (boss.x > cvs.width - 80 || boss.x < 0) boss.dir *= -1;
+        ctx.fillStyle = boss.hp < boss.maxHp/4 ? "orange" : "purple";
+        ctx.fillRect(boss.x, boss.y, 80, 40);
+        if (Math.random() < (difficulty === "Hard" ? 0.05 : 0.03)) {
+          [-2, 0, 2].forEach(vx => eBullets.push({ x: boss.x + 40, y: boss.y + 40, vx: vx, vy: 5, size: 6 }));
+        }
+      }
+      
+      ctx.fillStyle = "white"; ctx.font = "18px Arial"; ctx.textAlign = "left";
+      ctx.fillText("SCORE: " + score, 20, 30);
+      ctx.fillText("LIVES: " + "❤".repeat(lives), cvs.width - 120, 30);
     }
 
-    init();
+    function drawMenu() {
+      ctx.fillStyle = "white"; ctx.textAlign = "center";
+      ctx.font = "bold 36px Arial"; ctx.fillText("INVADER GAME", cvs.width/2, 150);
+      ctx.font = "20px Arial"; ctx.fillText("難易度を選択:", cvs.width/2, 250);
+      
+      diffBtns.forEach((b, i) => {
+        b.x = cvs.width/2 - 130 + i * 90; b.y = 280;
+        ctx.fillStyle = difficulty === b.id ? "#0f0" : "#333";
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.fillStyle = "white"; ctx.font = "16px Arial"; ctx.fillText(b.id, b.x + b.w/2, b.y + 25);
+      });
+
+      drawButton("スタート", cvs.height - 150);
+    }
+
+    function drawResult() {
+      ctx.fillStyle = gameState === "over" ? "red" : "yellow";
+      ctx.textAlign = "center"; ctx.font = "40px Arial";
+      ctx.fillText(gameState === "over" ? "GAME OVER" : "MISSION CLEAR!", cvs.width/2, cvs.height/2 - 50);
+      ctx.fillStyle = "white"; ctx.font = "20px Arial";
+      ctx.fillText("最終スコア: " + score, cvs.width/2, cvs.height/2);
+      drawButton("メニューに戻る", cvs.height/2 + 60);
+    }
+
+    function drawButton(text, y) {
+      btn.x = cvs.width/2 - 100; btn.y = y;
+      ctx.fillStyle = "#444"; ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+      ctx.strokeStyle = "white"; ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
+      ctx.fillStyle = "white"; ctx.font = "bold 20px Arial"; ctx.textAlign = "center";
+      ctx.fillText(text, cvs.width/2, btn.y + 32);
+    }
+
+    gameState = "menu";
+    difficulty = "Normal";
     loop();
   </script>
 </body>
